@@ -1,0 +1,138 @@
+﻿# =============================================================================
+# Market Stress Probability Index (MSPI) - Production Requirements
+# =============================================================================
+# 
+# This requirements file specifies the exact dependency stack for the MSPI
+# framework as described in Schmitt (2026). All versions are pinned to ensure
+# deterministic reproducibility across environments—a critical requirement for
+# academic research validation and production deployment.
+#
+# Installation: pip install -r requirements.txt
+#
+# Python Version Requirement: >=3.9,<3.13
+# Rationale: Type hints (PEP 585) and improved dict operations require 3.9+.
+#            Tested up to 3.12; 3.13 may have compatibility issues with numba.
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core Scientific Computing Stack
+# -----------------------------------------------------------------------------
+
+# NumPy: Fundamental array operations and vectorized computations
+# Used for: Cross-sectional moment calculations, broadcasting, matrix ops
+# Version rationale: 1.26.x is the last stable release before 2.0 API changes
+numpy==1.26.4
+
+# Pandas: Time-series and panel data manipulation
+# Used for: CRSP data handling, date indexing, groupby operations
+# Version rationale: 2.2.x provides stable categorical types and datetime64[ns]
+pandas==2.2.0
+
+# SciPy: Scientific computing primitives
+# Used for: Special functions (expit for logistic), statistical distributions
+# Version rationale: 1.12.x is stable and compatible with NumPy 1.26.x
+scipy==1.12.0
+
+# -----------------------------------------------------------------------------
+# Statistical & Econometric Analysis
+# -----------------------------------------------------------------------------
+
+# Statsmodels: Econometric modeling and inference
+# Used for: HAC-robust standard errors (Newey-West), local projections, GLM
+# Version rationale: 0.14.x provides stable API for time-series econometrics
+statsmodels==0.14.1
+
+# -----------------------------------------------------------------------------
+# Machine Learning & Predictive Modeling
+# -----------------------------------------------------------------------------
+
+# Scikit-learn: Machine learning algorithms and evaluation metrics
+# Used for: Lasso-Logit (LogisticRegression with L1), Random Forest, GBM
+#           Metrics: Brier score, log loss, ROC-AUC, PR-AUC
+# Version rationale: 1.4.x provides stable API and improved solver performance
+scikit-learn==1.4.0
+
+# -----------------------------------------------------------------------------
+# Optional: Performance Optimization (Recommended for Large-Scale Data)
+# -----------------------------------------------------------------------------
+
+# Numba: JIT compilation for accelerating NumPy operations
+# Used for: Accelerating cross-sectional moment calculations, tail fraction loops
+# Uncomment if processing >10K stocks or >20 years of daily data
+# numba==0.59.0
+
+# Bottleneck: Fast NumPy array functions for moving windows
+# Used for: Optimizing rolling window operations in expanding-window standardization
+# Uncomment for 5-10x speedup on rolling statistics
+# bottleneck==1.3.8
+
+# -----------------------------------------------------------------------------
+# Optional: Development & Testing Dependencies
+# -----------------------------------------------------------------------------
+
+# PyTest: Unit testing framework
+# Used for: Verifying no look-ahead bias, validating data integrity
+# pytest==8.0.0
+
+# Black: Code formatter (PEP-8 compliance)
+# Used for: Enforcing consistent code style across the codebase
+# black==24.1.1
+
+# MyPy: Static type checker
+# Used for: Validating type hints for all function signatures
+# mypy==1.8.0
+
+# Flake8: Linting and style checking
+# Used for: Enforcing PEP-8 and detecting potential bugs
+# flake8==7.0.0
+
+# -----------------------------------------------------------------------------
+# Optional: Data Acquisition (WRDS Access)
+# -----------------------------------------------------------------------------
+
+# WRDS: Wharton Research Data Services Python API
+# Used for: Direct programmatic access to CRSP databases (dsf, dsi)
+# Requires institutional subscription and authentication
+# Uncomment if using WRDS API instead of manual data downloads
+# wrds==3.1.6
+
+# -----------------------------------------------------------------------------
+# Optional: Visualization (Research & Diagnostics)
+# -----------------------------------------------------------------------------
+
+# Matplotlib: Static plotting
+# Used for: Reliability diagrams, calibration curves, time-series plots
+# matplotlib==3.8.2
+
+# Seaborn: Statistical data visualization
+# Used for: Distribution plots, heatmaps for feature correlation analysis
+# seaborn==0.13.2
+
+# -----------------------------------------------------------------------------
+# Dependency Resolution Notes
+# -----------------------------------------------------------------------------
+#
+# 1. NumPy/Pandas Compatibility:
+#    - NumPy 1.26.4 is compatible with Pandas 2.2.0
+#    - Pandas 2.2.0 dropped Python 3.8 support (requires 3.9+)
+#
+# 2. SciPy/NumPy Compatibility:
+#    - SciPy 1.12.0 is built against NumPy 1.26.x
+#    - expit() function is stable across SciPy 1.x versions
+#
+# 3. Scikit-learn/NumPy Compatibility:
+#    - Scikit-learn 1.4.0 requires NumPy >=1.19.5
+#    - LogisticRegression(solver='saga') requires scikit-learn >=0.21
+#
+# 4. Statsmodels/Pandas Compatibility:
+#    - Statsmodels 0.14.1 is compatible with Pandas 2.x
+#    - Required for HAC-robust inference (sm.regression.linear_model.OLS)
+#
+# 5. Thread Safety:
+#    - Set environment variable: OMP_NUM_THREADS=1 for deterministic results
+#    - Set NumPy random seed: np.random.seed(42) in main script
+#
+# =============================================================================
+# End of Requirements
+# =============================================================================

@@ -1,0 +1,207 @@
+﻿# ==============================================================================
+# Study Configuration: Algorithmic Monitoring (Schmitt, 2026)
+# ==============================================================================
+# This configuration file encapsulates the complete experimental design, data 
+# schema, and algorithmic parameters required to reproduce the Market Stress 
+# Probability Index (MSPI).
+#
+# Source: arXiv:2602.07066v1 [q-fin.RM] 5 Feb 2026
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. RAW DATA SCHEMA (INPUT STRUCTURES)
+# ------------------------------------------------------------------------------
+raw_data_schema:
+  crsp_daily_stock_file:
+    source: "CRSP Daily Stock File (dsf)"
+    required_columns:
+      - "PERMNO"
+      - "DATE"
+      - "SHRCD"
+      - "EXCHCD"
+      - "PRC"
+      - "RET"
+      - "VOL"
+      - "SHROUT"
+    optional_columns:
+      - "TICKER"
+    units:
+      PRC: "USD (CRSP signed convention; use abs(PRC) where specified)"
+      RET: "daily holding period return (decimal)"
+      VOL: "shares traded (count)"
+      SHROUT: "shares outstanding in thousands (000s)"
+
+  crsp_daily_index_file:
+    source: "CRSP Daily Stock Indices (dsi)"
+    required_columns:
+      - "DATE"
+      - "vwretd"
+    optional_columns:
+      - "ewretd"
+      - "totval"
+    units:
+      vwretd: "daily value-weighted return incl. distributions (decimal)"
+
+# ------------------------------------------------------------------------------
+# 2. UNIVERSE CONSTRUCTION PARAMETERS
+# ------------------------------------------------------------------------------
+universe_construction:
+  valid_share_codes: [10, 11]
+  valid_exch_codes: [1, 2, 3]
+  min_abs_price_usd: 1.00
+  required_non_missing:
+    - "RET"
+    - "PRC"
+  price_field: "PRC"
+  return_field: "RET"
+  abs_price_required: true
+
+# ------------------------------------------------------------------------------
+# 3. FEATURE ENGINEERING PARAMETERS
+# ------------------------------------------------------------------------------
+feature_engineering:
+  tail_threshold_tau: 0.05  # baseline tau = 5%
+  log_volume_offset: 1.0    # uses log(1 + VOL)
+  dollar_volume_uses_abs_price: true
+  
+  turnover:
+    shares_out_scaling: 1000.0  # SharesOut = 1000 * SHROUT
+    definition: "VOL / (1000 * SHROUT)"
+    
+  monthly_aggregation:
+    frequency: "M"
+    daily_to_month_method: "mean"
+    month_definition: "calendar_month"
+    
+  final_feature_names_monthly:
+    - "n_stocks"
+    - "sigma_xs"
+    - "Skew_xs"
+    - "Kurt_xs"
+    - "mean_abs_ret"
+    - "Frac_dn_5pct"
+    - "Frac_up_5pct"
+    - "mean_log1p_vol"
+    - "mean_dollar_vol"
+    - "mean_turnover"
+
+# ------------------------------------------------------------------------------
+# 4. MARKET AGGREGATES AND TARGET DEFINITION
+# ------------------------------------------------------------------------------
+market_aggregates:
+  market_return_field_daily: "vwretd"
+  monthly_market_return_method: "compound"
+  monthly_realized_vol_method: "within_month_sd_annualized"
+  # Note: annualization_factor is sqrt(252) ~ 15.874507866387544
+  annualization_factor: 15.874507866387544
+
+target_definition:
+  return_cutoff_c_R: -0.05
+  vol_quantile_alpha: 0.90
+  vol_quantile_window: "expanding"
+  vol_quantile_lag_months: 1  # q_{t-1}(alpha)
+  target_horizon_months: 1    # Y_{t+1} = S_{t+1}
+
+# ------------------------------------------------------------------------------
+# 5. LEARNING PROTOCOL
+# ------------------------------------------------------------------------------
+learning_protocol:
+  window_type: "expanding"
+  initial_training_window_months: 120
+  
+  standardization:
+    method: "zscore"
+    scope: "training_window_only"
+    
+  hyperparameter_tuning:
+    cv_type: "forward_chaining_time_series_cv"
+    tune_in_initial_window_only: true
+    hold_fixed_after_tuning: true
+    cv_objective: null  # Must be set by user (e.g., "neg_log_loss")
+
+# ------------------------------------------------------------------------------
+# 6. MODELS
+# ------------------------------------------------------------------------------
+models:
+  mspi_lasso_logit:
+    family: "logistic_regression"
+    penalty: "l1"
+    regularization_parameterization:
+      paper_lambda: "lambda"
+      note: "If using a library with inverse-regularization C, document mapping to lambda explicitly."
+    solver_constraint: "must support L1 logistic (implementation-specific)"
+
+  benchmark_ridge_logit:
+    family: "logistic_regression"
+    penalty: "l2"
+    features:
+      - "R_mkt_t"
+      - "sigma_mkt_t"
+    regularization_parameterization: "implementation-specific (ridge penalty)"
+
+  random_forest:
+    family: "random_forest_classifier"
+    hyperparameters: null  # Must be tuned in initial window
+    probability_output:
+      native_probability_used: false
+      calibration: "platt"
+      calibration_scope: "fit_within_each_training_window_real_time"
+
+  gradient_boosted_trees:
+    family: "gradient_boosted_trees_classifier"
+    hyperparameters: null  # Must be tuned in initial window
+    loss: "bernoulli_log_likelihood"
+    probability_output:
+      native_probability_used: false
+      calibration: "platt"
+      calibration_scope: "fit_within_each_training_window_real_time"
+
+# ------------------------------------------------------------------------------
+# 7. EVALUATION & INFERENCE
+# ------------------------------------------------------------------------------
+evaluation_inference:
+  oos_period:
+    start_year: 2005
+    end_year: 2024
+    
+  discrimination_metrics:
+    - "roc_auc"
+    - "pr_auc"
+    
+  probability_metrics:
+    - "brier_score"
+    - "log_loss"
+    - "mean_predicted_probability"
+    
+  calibration:
+    ece_bins: 10
+    binning: "equal_mass_quantiles"
+    ece_definition: "sum_b w_b * |freq_b - pred_b|"
+    
+  block_bootstrap:
+    enabled: true
+    block_length_months: 12
+    replications: 2000
+    resampling_unit: "months"
+
+# ------------------------------------------------------------------------------
+# 8. ECONOMIC ANALYSIS
+# ------------------------------------------------------------------------------
+economic_analysis:
+  innovation_regression:
+    lag_order_mspi: 1
+    controls:
+      - "R_mkt_t_minus_1"
+      - "sigma_mkt_t_minus_1"
+      
+  local_projections:
+    horizons_h: null  # Must be set by user
+    hac_inference: true
+    controls_W: null  # Must be set by user
+
+# ------------------------------------------------------------------------------
+# 9. REPRODUCIBILITY CONTROLS
+# ------------------------------------------------------------------------------
+reproducibility:
+  random_seed: 0
+  deterministic_execution: true
